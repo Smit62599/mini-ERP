@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% block title %}{{ order.so_number if order else 'New Sales Order' }} – Shiv Furniture Works{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('sales.list_orders') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back
+        </a>
+        {% if order %}
+            {% if order.status.value == 'draft' and current_user.role.value in ['admin', 'sales'] %}
+            <form method="POST" action="{{ url_for('sales.confirm_order', order_id=order.id) }}" class="d-inline">
+                <button type="submit" class="btn btn-success">Confirm</button>
+            </form>
+            {% endif %}
+            {% if order.status.value in ['confirmed', 'partially_delivered'] and not order.is_fully_delivered and current_user.role.value in ['admin', 'sales'] %}
+            <button type="submit" form="deliver-form" class="btn btn-primary">Deliver</button>
+            {% endif %}
+            {% if order.status.value not in ['delivered', 'cancelled'] and current_user.role.value in ['admin', 'sales'] %}
+            <form method="POST" action="{{ url_for('sales.cancel_order', order_id=order.id) }}" class="d-inline"
+                  onsubmit="return confirm('Cancel this order?');">
+                <button type="submit" class="btn btn-outline-danger">Cancel</button>
+            </form>
+            {% endif %}
+        {% endif %}
+    </div>
+    {% if order %}
+    <div class="d-flex align-items-center gap-3">
+        <a href="{{ url_for('sales.order_logs', order_id=order.id) }}" class="btn btn-outline-info btn-sm">
+            <i class="bi bi-journal-text"></i> Logs
+        </a>
+        <span class="badge bg-secondary status-badge fs-6">
+            {{ order.status_label }}
+        </span>
+    </div>
+    {% endif %}
+</div>
+
+<form method="POST" id="{% if order and order.status.value in ['confirmed', 'partially_delivered'] %}deliver-form{% else %}order-form{% endif %}">
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+            <h4 class="mb-0">{{ order.so_number if order else 'New Sales Order' }}</h4>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Customer <span class="text-danger">*</span></label>
+                    <select name="customer_id" class="form-select" {% if readonly %}disabled{% endif %} required>
+                        <option value="">Select customer…</option>
+                        {% for c in customers %}
+                        <option value="{{ c.id }}"
+                            {% if order and order.customer_id == c.id %}selected{% endif %}>
+                            {{ c.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Sales Person</label>
+                    {% if current_user.role.value == 'sales' %}
+                    {# Sales login: locked to self – no dropdown, no admin access #}
+                    <input type="text" class="form-control" readonly
+                           value="{{ order.sales_person.name if order else current_user.name }}">
+                    {% if not readonly %}
+                    <input type="hidden" name="sales_person_id" value="{{ current_user.id }}">
+                    {% endif %}
+                    {% else %}
+                    <select name="sales_person_id" class="form-select" {% if readonly %}disabled{% endif %}>
+                        {% for sp in salespeople %}
+                        <option value="{{ sp.id }}"
+                            {% if order and order.sales_person_id == sp.id %}selected
+                            {% elif not order and sp.id == current_user.id %}selected{% endif %}>
+                            {{ sp.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {% endif %}
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label">Customer Address</label>
+                    <input type="text" name="customer_address" class="form-control" maxlength="512"
+                           value="{{ order.customer_address if order else '' }}"
+                           {% if readonly %}readonly{% endif %}>
+                </div>
+                {% if order %}
+                <div class="col-md-4">
+                    <label class="form-label">Creation Date</label>
+                    <input type="text" class="form-control" readonly
+                           value="{{ order.created_at.strftime('%d %b %Y %H:%M') }}">
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Line items -->
+    {% if order and order.status.value in ['confirmed', 'partially_delivered'] and not order.is_fully_delivered %}
+    <div class="alert alert-info py-2 mb-3">
+        <i class="bi bi-info-circle"></i>
+        Enter the <strong>delivered quantity</strong> for each line (must be greater than the current value),
+        then click <strong>Deliver</strong>.
+        {% if order.lines|length > 1 %}
+        For <strong>Fully Delivered</strong>, every line must have delivered qty equal to ordered qty.
+        {% endif %}
+        The order moves to <em>Partially Delivered</em> or <em>Fully Delivered</em> automatically.
+    </div>
+    {% endif %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white"><h5 class="mb-0">Products</h5></div>
+        <div class="table-responsive">
+            <table class="table mb-0" id="lines-table">
+                <thead class="table-light">
+                    <tr>
+                        <th>Product</th>
+                        <th>Availability</th>
+                        <th>Ordered Qty</th>
+                        <th>Delivered Qty</th>
+                        <th>Unit Price</th>
+                        <th class="text-end">Total</th>
+                        {% if not order %}<th style="width:40px"></th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if order and order.lines %}
+                        {% for line in order.lines %}
+                        <tr>
+                            <td>{{ line.product | product_label }}</td>
+                            <td>
+                                {% if line.product %}
+                                {% set free = [line.product.on_hand_qty - line.product.reserved_qty, 0]|max %}
+                                {% if line.ordered_qty > free %}
+                                <span class="availability-warning"><i class="bi bi-exclamation-triangle"></i> Low ({{ free }})</span>
+                                {% else %}
+                                <span class="availability-ok"><i class="bi bi-check-circle"></i> {{ free }}</span>
+                                {% endif %}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ line.ordered_qty }}</td>
+                            <td>
+                                {% if order.status.value in ['confirmed', 'partially_delivered'] and not line.is_fully_delivered and current_user.role.value in ['admin', 'sales'] %}
+                                <input type="number" name="delivered_qty_{{ line.id }}"
+                                       class="form-control form-control-sm" style="width:100px"
+                                       min="{{ line.delivered_qty }}" max="{{ line.ordered_qty }}" step="0.001"
+                                       value="{{ line.delivered_qty }}">
+                                {% else %}
+                                {{ line.delivered_qty }}
+                                {# Keep completed lines in the POST so multi-line orders can reach Fully Delivered #}
+                                {% if order.status.value in ['confirmed', 'partially_delivered'] and line.is_fully_delivered and current_user.role.value in ['admin', 'sales'] %}
+                                <input type="hidden" name="delivered_qty_{{ line.id }}" value="{{ line.delivered_qty }}">
+                                {% endif %}
+                                {% endif %}
+                            </td>
+                            <td>₹{{ '%.2f'|format(line.sales_price) }}</td>
+                            <td class="text-end">₹{{ '%.2f'|format(line.line_total) }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% elif not order %}
+                        <!-- New order: dynamic line rows (JS adds more via "Add a product") -->
+                        <tr class="line-row">
+                            <td>
+                                <select name="product_id" class="form-select form-select-sm product-select">
+                                    <option value="">Select product…</option>
+                                    {% for p in products %}
+                                    <option value="{{ p.id }}"
+                                            data-price="{{ p.sales_price }}"
+                                            data-free="{{ [p.on_hand_qty - p.reserved_qty, 0]|max }}">
+                                        {{ p.name }} (₹{{ '%.2f'|format(p.sales_price) }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td class="availability-cell">—</td>
+                            <td>
+                                <input type="number" name="ordered_qty"
+                                       class="form-control form-control-sm ordered-qty"
+                                       style="width:100px" min="0.001" step="0.001" value="1">
+                            </td>
+                            <td>—</td>
+                            <td class="unit-price-cell">—</td>
+                            <td class="text-end line-total-cell">—</td>
+                            <td class="text-center" style="width:40px">
+                                <button type="button" class="btn btn-sm btn-outline-danger remove-line-btn"
+                                        title="Remove line" hidden>&times;</button>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="6" class="text-center text-muted">No line items.</td></tr>
+                    {% endif %}
+                </tbody>
+                {% if not order %}
+                <tfoot>
+                    <tr>
+                        <td colspan="7" class="border-0 pt-0">
+                            <button type="button" id="add-line-btn" class="btn btn-link btn-sm ps-0">
+                                <i class="bi bi-plus-circle"></i> Add a product
+                            </button>
+                        </td>
+                    </tr>
+                    <tr class="table-light">
+                        <td colspan="5" class="text-end fw-bold">Total</td>
+                        <td class="text-end fw-bold" id="order-total">₹0.00</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+                {% elif order %}
+                <tfoot class="table-light">
+                    <tr>
+                        <td colspan="5" class="text-end fw-bold">Total</td>
+                        <td class="text-end fw-bold">₹{{ '%.2f'|format(order.total_amount) }}</td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+
+    {% if not order %}
+    <button type="submit" class="btn btn-primary">Create Sales Order</button>
+    {% elif order.status.value == 'draft' and current_user.role.value in ['admin', 'sales'] %}
+    <button type="submit" form="order-form" class="btn btn-secondary">Save Changes</button>
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block extra_js %}
+{% if not order %}
+<script>
+(function () {
+    const tbody = document.querySelector('#lines-table tbody');
+    const addBtn = document.getElementById('add-line-btn');
+    const orderTotalEl = document.getElementById('order-total');
+
+    /** Recalculate availability, unit price, and line total for one row. */
+    function updateRow(row) {
+        const select = row.querySelector('.product-select');
+        const qtyInput = row.querySelector('.ordered-qty');
+        const availCell = row.querySelector('.availability-cell');
+        const priceCell = row.querySelector('.unit-price-cell');
+        const totalCell = row.querySelector('.line-total-cell');
+
+        const option = select.selectedOptions[0];
+        if (!option || !option.value) {
+            availCell.textContent = '—';
+            priceCell.textContent = '—';
+            totalCell.textContent = '—';
+            return;
+        }
+
+        const price = parseFloat(option.dataset.price);
+        const free = parseFloat(option.dataset.free);
+        const qty = parseFloat(qtyInput.value) || 0;
+
+        if (qty > free) {
+            availCell.innerHTML =
+                '<span class="availability-warning"><i class="bi bi-exclamation-triangle"></i> Low (' + free + ')</span>';
+        } else {
+            availCell.innerHTML =
+                '<span class="availability-ok"><i class="bi bi-check-circle"></i> ' + free + '</span>';
+        }
+
+        priceCell.textContent = '₹' + price.toFixed(2);
+        totalCell.textContent = '₹' + (qty * price).toFixed(2);
+    }
+
+    /** Sum all line totals into the footer grand total. */
+    function updateGrandTotal() {
+        let total = 0;
+        tbody.querySelectorAll('.line-row').forEach(function (row) {
+            const select = row.querySelector('.product-select');
+            const qty = parseFloat(row.querySelector('.ordered-qty').value) || 0;
+            const option = select.selectedOptions[0];
+            if (option && option.value) {
+                total += qty * parseFloat(option.dataset.price);
+            }
+        });
+        orderTotalEl.textContent = '₹' + total.toFixed(2);
+    }
+
+    function refreshAll() {
+        tbody.querySelectorAll('.line-row').forEach(updateRow);
+        updateGrandTotal();
+        updateRemoveButtons();
+    }
+
+    /** Show remove button only when more than one line exists. */
+    function updateRemoveButtons() {
+        const rows = tbody.querySelectorAll('.line-row');
+        rows.forEach(function (row) {
+            const btn = row.querySelector('.remove-line-btn');
+            if (btn) btn.hidden = rows.length <= 1;
+        });
+    }
+
+    /** Wire change/input events on a single line row. */
+    function bindRow(row) {
+        row.querySelector('.product-select').addEventListener('change', function () {
+            updateRow(row);
+            updateGrandTotal();
+        });
+        row.querySelector('.ordered-qty').addEventListener('input', function () {
+            updateRow(row);
+            updateGrandTotal();
+        });
+        const removeBtn = row.querySelector('.remove-line-btn');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', function () {
+                row.remove();
+                refreshAll();
+            });
+        }
+    }
+
+    /** Clone the first row to add another product line. */
+    addBtn.addEventListener('click', function () {
+        const template = tbody.querySelector('.line-row');
+        const newRow = template.cloneNode(true);
+        newRow.querySelector('.product-select').value = '';
+        newRow.querySelector('.ordered-qty').value = '1';
+        newRow.querySelector('.availability-cell').textContent = '—';
+        newRow.querySelector('.unit-price-cell').textContent = '—';
+        newRow.querySelector('.line-total-cell').textContent = '—';
+        tbody.appendChild(newRow);
+        bindRow(newRow);
+        updateRemoveButtons();
+    });
+
+    // Initialise the first row.
+    tbody.querySelectorAll('.line-row').forEach(bindRow);
+    updateRemoveButtons();
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Manufacturing Orders – Shiv Furniture Works{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">Manufacturing Orders</h2>
+        <p class="text-muted mb-0 small">Factory floor dashboard – what to build next</p>
+    </div>
+    <a href="{{ url_for('manufacturing.new_order') }}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> Create New MO
+    </a>
+</div>
+
+<!-- Status filter nav-pills (Bootstrap 5) -->
+<ul class="nav nav-pills mb-4 flex-wrap gap-1">
+    <li class="nav-item">
+        <a class="nav-link {% if not current_status %}active{% endif %}"
+           href="{{ url_for('manufacturing.list_orders') }}">
+            All
+            <span class="badge bg-light text-dark ms-1">
+                {{ status_counts.values()|sum }}
+            </span>
+        </a>
+    </li>
+    {% for status in statuses if status.value != 'cancelled' %}
+    <li class="nav-item">
+        <a class="nav-link {% if current_status == status.value %}active{% endif %}"
+           href="{{ url_for('manufacturing.list_orders', status=status.value) }}">
+            {{ status | mo_status_label }}
+            {% set count = status_counts.get(status.value, 0) %}
+            {% if count %}<span class="badge bg-light text-dark ms-1">{{ count }}</span>{% endif %}
+        </a>
+    </li>
+    {% endfor %}
+</ul>
+
+<!-- MO data table -->
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>MO Number</th>
+                    <th>Finished Product</th>
+                    <th class="text-end">Quantity</th>
+                    <th>Assignee</th>
+                    <th>Status</th>
+                    <th>Expected vs. Real Duration</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mo in pagination.items %}
+                <tr>
+                    <td><strong>{{ mo.mo_number }}</strong></td>
+                    {# product + assignee already eager-loaded – no extra SQL here #}
+                    <td>{{ mo.product | product_label }}</td>
+                    <td class="text-end">{{ mo.quantity }}</td>
+                    <td>{{ mo.assignee.name }}</td>
+                    <td>
+                        <span class="badge {{ mo.status_badge_class }} status-badge">
+                            {{ mo.status_label }}
+                        </span>
+                    </td>
+                    <td class="text-muted small">{{ mo.duration_display }}</td>
+                    <td class="text-end">
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                    type="button" data-bs-toggle="dropdown"
+                                    aria-expanded="false">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('manufacturing.view_order', order_id=mo.id) }}">
+                                        <i class="bi bi-eye"></i> View Details
+                                    </a>
+                                </li>
+                                {% if mo.status.value == 'confirmed' %}
+                                <li>
+                                    <form method="POST" action="{{ url_for('manufacturing.start_order', order_id=mo.id) }}">
+                                        <button type="submit" class="dropdown-item text-warning">
+                                            <i class="bi bi-play-fill"></i> Start Production
+                                        </button>
+                                    </form>
+                                </li>
+                                {% endif %}
+                                {% if mo.status.value == 'inprogress' %}
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('manufacturing.view_order', order_id=mo.id) }}">
+                                        <i class="bi bi-check-circle"></i> Mark as Done
+                                    </a>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-5">
+                        <i class="bi bi-gear-wide-connected fs-3 d-block mb-2"></i>
+                        No manufacturing orders found.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% set endpoint = 'manufacturing.list_orders' %}
+{% include "partials/pagination.html" %}
+{% endblock %}

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}User Management – Shiv Furniture Works{% endblock %}
+
+{% block content %}
+<div class="admin-users-page">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0">System Administrator Dashboard</h2>
+            <p class="text-muted mb-0">User Management</p>
+        </div>
+        <a href="{{ url_for('admin_users.new_user') }}" class="btn btn-primary">
+            <i class="bi bi-person-plus"></i> Add New Person
+        </a>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+            <h5 class="mb-0">Users</h5>
+            <div class="d-flex align-items-center gap-2">
+                <form method="GET" class="d-flex" id="user-search-form">
+                    <input type="text" name="q" class="form-control form-control-sm me-1"
+                           placeholder="Search users…" value="{{ search or '' }}" style="width: 200px;">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm" title="Search">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </form>
+                <button type="button" class="btn btn-outline-secondary btn-sm active" title="List view">
+                    <i class="bi bi-list-ul"></i>
+                </button>
+                <button type="submit" form="delete-users-form"
+                        class="btn btn-outline-danger btn-sm"
+                        title="Delete selected"
+                        onclick="return confirm('Delete selected user(s)?');">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+
+        <form method="POST" action="{{ url_for('admin_users.delete_users') }}" id="delete-users-form">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 40px;">
+                                <input type="checkbox" class="form-check-input" id="select-all-users">
+                            </th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Position</th>
+                            <th>Role</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr class="user-row" data-href="{{ url_for('admin_users.manage_user', user_id=user.id) }}">
+                            <td onclick="event.stopPropagation();">
+                                <input type="checkbox" class="form-check-input user-select"
+                                       name="user_ids" value="{{ user.id }}"
+                                       {% if user.id == current_user.id %}disabled{% endif %}>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('admin_users.manage_user', user_id=user.id) }}"
+                                   class="text-decoration-none fw-semibold">
+                                    {{ user.name }}
+                                </a>
+                            </td>
+                            <td class="text-muted">{{ user.email }}</td>
+                            <td>{{ user.position_label }}</td>
+                            <td><span class="badge bg-secondary status-badge">{{ user.role.value }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-5">No users found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .user-row { cursor: pointer; }
+    .user-row:hover { background-color: #f8f9fa; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('.user-row').forEach(row => {
+    row.addEventListener('click', () => {
+        const href = row.dataset.href;
+        if (href) window.location.href = href;
+    });
+});
+const selectAll = document.getElementById('select-all-users');
+if (selectAll) {
+    selectAll.addEventListener('change', () => {
+        document.querySelectorAll('.user-select:not(:disabled)').forEach(cb => {
+            cb.checked = selectAll.checked;
+        });
+    });
+}
+</script>
+{% endblock %}

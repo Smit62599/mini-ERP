@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}{{ order.po_number if order else 'New Purchase Order' }} – Shiv Furniture Works{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a href="{{ url_for('purchase.list_orders') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+    {% if order %}
+    <span class="badge bg-secondary status-badge fs-6">{{ order.status_label }}</span>
+    {% endif %}
+</div>
+
+<form method="POST" id="po-form">
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+            <h4 class="mb-0">{{ order.po_number if order else 'New Purchase Order' }}</h4>
+        </div>
+        <div class="card-body row g-3">
+            <div class="col-md-6">
+                <label class="form-label">Vendor</label>
+                <select name="vendor_id" class="form-select" {% if readonly %}disabled{% endif %} required>
+                    <option value="">Select vendor…</option>
+                    {% for v in vendors %}
+                    <option value="{{ v.id }}"
+                        {% if order and order.vendor_id == v.id %}selected{% endif %}>{{ v.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Product Lines</h5>
+            {% if not readonly %}
+            <button type="button" class="btn btn-sm btn-outline-primary" id="add-po-line">
+                <i class="bi bi-plus-lg"></i> Add Product Line
+            </button>
+            {% endif %}
+        </div>
+        <div class="table-responsive">
+            <table class="table mb-0" id="po-lines-table">
+                <thead class="table-light">
+                    <tr>
+                        <th>Product</th>
+                        <th>Ordered Qty</th>
+                        <th>Received Qty</th>
+                        {% if not readonly %}<th></th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if order and order.lines %}
+                        {% for line in order.lines %}
+                        <tr>
+                            <td>
+                                {% if readonly %}
+                                {{ line.product | product_label }}
+                                <input type="hidden" name="product_id" value="{{ line.product_id or '' }}">
+                                {% else %}
+                                <select name="product_id" class="form-select" required>
+                                    <option value="">Select…</option>
+                                    {% for p in products %}
+                                    <option value="{{ p.id }}" {% if line.product_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <input type="number" step="0.001" name="ordered_qty" class="form-control"
+                                       value="{{ line.quantity }}" min="0.001"
+                                       {% if readonly %}readonly{% endif %} required>
+                            </td>
+                            <td>
+                                <input type="number" step="0.001" name="received_qty" class="form-control"
+                                       value="{{ line.received_qty }}" min="0"
+                                       {% if not can_receive %}readonly{% endif %}>
+                            </td>
+                            {% if not readonly %}
+                            <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">×</button></td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    {% elif not order %}
+                        <tr class="po-line-row">
+                            <td>
+                                <select name="product_id" class="form-select" required>
+                                    <option value="">Select…</option>
+                                    {% for p in products %}
+                                    <option value="{{ p.id }}">{{ p.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td><input type="number" step="0.001" name="ordered_qty" class="form-control" value="1" min="0.001" required></td>
+                            <td><input type="number" step="0.001" name="received_qty" class="form-control" value="0" min="0" readonly></td>
+                            <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">×</button></td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="4" class="text-center text-muted py-3">No lines.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if not readonly %}
+    <div class="d-flex gap-2">
+        <button type="submit" name="action" value="save" class="btn btn-primary">Save PO</button>
+        {% if order and can_receive %}
+        <button type="submit" name="action" value="complete" class="btn btn-success"
+                onclick="return confirm('Receive stock and mark this PO as Done?');">
+            Receive Stock &amp; Mark Done
+        </button>
+        {% endif %}
+    </div>
+    {% elif order and order.status.value == 'done' %}
+    <p class="text-muted small mb-0"><i class="bi bi-lock"></i> This purchase order is closed – no further edits.</p>
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block extra_js %}
+{% if not readonly %}
+<script>
+const productOptions = `{% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}`;
+
+document.getElementById('add-po-line')?.addEventListener('click', () => {
+    const tr = document.createElement('tr');
+    tr.className = 'po-line-row';
+    tr.innerHTML = `
+        <td><select name="product_id" class="form-select" required><option value="">Select…</option>${productOptions}</select></td>
+        <td><input type="number" step="0.001" name="ordered_qty" class="form-control" value="1" min="0.001" required></td>
+        <td><input type="number" step="0.001" name="received_qty" class="form-control" value="0" min="0"></td>
+        <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">×</button></td>`;
+    document.querySelector('#po-lines-table tbody').appendChild(tr);
+});
+
+document.addEventListener('click', e => {
+    if (e.target.classList.contains('remove-row')) {
+        const tbody = document.querySelector('#po-lines-table tbody');
+        if (tbody.querySelectorAll('tr').length > 1) e.target.closest('tr').remove();
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

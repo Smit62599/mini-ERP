@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ user.name }} – User Management{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('admin_users.list_users') }}" class="text-decoration-none">
+        <i class="bi bi-arrow-left"></i> Back to Users
+    </a>
+</div>
+
+<form method="POST">
+    <input type="hidden" name="active_tab" value="{{ active_tab }}">
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0">User Management Form View</h5>
+            <small class="text-muted">System Administrator – manage position and module permissions</small>
+        </div>
+        <div class="card-body p-4">
+            <div class="row g-4">
+                <div class="col-lg-8">
+                    <div class="read-only-fields border border-2 border-secondary border-opacity-25 rounded p-3 bg-light">
+                        <div class="row mb-3">
+                            <label class="col-sm-4 col-form-label text-muted">Name</label>
+                            <div class="col-sm-8 col-form-label">{{ user.name }}</div>
+                        </div>
+                        <div class="row mb-3">
+                            <label class="col-sm-4 col-form-label text-muted">Address</label>
+                            <div class="col-sm-8 col-form-label">{{ user.address or '—' }}</div>
+                        </div>
+                        <div class="row mb-3">
+                            <label class="col-sm-4 col-form-label text-muted">Mobile Number</label>
+                            <div class="col-sm-8 col-form-label">{{ user.mobile_number or '—' }}</div>
+                        </div>
+                        <div class="row mb-0">
+                            <label class="col-sm-4 col-form-label text-muted">Email ID</label>
+                            <div class="col-sm-8 col-form-label">{{ user.email }}</div>
+                        </div>
+                    </div>
+                    <p class="small text-muted mt-2 mb-0">
+                        <i class="bi bi-info-circle"></i> Name, address, mobile, and email are read-only.
+                    </p>
+
+                    <div class="row mt-4 align-items-center">
+                        <label for="position" class="col-sm-4 col-form-label fw-semibold">Position</label>
+                        <div class="col-sm-8">
+                            <select class="form-select" id="position" name="position" required>
+                                {% for pos in positions %}
+                                <option value="{{ pos }}" {% if selected_position == pos %}selected{% endif %}>
+                                    {{ pos }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text text-danger">
+                                Personal details above are read-only. Only Position and permissions can be changed here.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-4 text-center">
+                    <div class="rounded-3 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center mx-auto"
+                         style="width: 160px; height: 160px; font-size: 4rem; color: #6c757d;">
+                        <i class="bi bi-person-fill"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white pb-0">
+            <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                {% for module in modules %}
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link {% if active_tab == module %}active{% endif %}"
+                       href="{{ url_for('admin_users.manage_user', user_id=user.id, tab=module) }}">
+                        {{ module_labels[module] }}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="card-body p-0">
+            {% for module in modules %}
+            <div class="tab-pane-content {% if active_tab != module %}d-none{% endif %}">
+                <div class="table-responsive">
+                    <table class="table table-bordered mb-0 align-middle text-center permissions-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-start ps-3">Field</th>
+                                <th style="width: 100px;">Create</th>
+                                <th style="width: 100px;">View</th>
+                                <th style="width: 100px;">Edit</th>
+                                <th style="width: 100px;">Delete</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in module_rows[module] %}
+                            <tr>
+                                <td class="text-start ps-3 fw-medium">{{ row.field }}</td>
+                                {% for action in ['create', 'view', 'edit', 'delete'] %}
+                                {% set cell = row.cells[action] %}
+                                <td>
+                                    {% if cell.type == 'checkbox' %}
+                                    <input type="checkbox" class="form-check-input"
+                                           name="{{ cell.name }}"
+                                           {% if cell.value %}checked{% endif %}>
+                                    {% elif cell.value == 'auto_compute' %}
+                                    <span class="badge text-bg-light text-muted">Auto Compute</span>
+                                    {% elif cell.value == 'recomputed' %}
+                                    <span class="badge text-bg-light text-muted">Recomputed</span>
+                                    {% elif cell.value == 'system_computed' %}
+                                    <span class="badge text-bg-light text-muted">System Computed</span>
+                                    {% elif cell.value == 'not_possible' %}
+                                    <span class="badge text-bg-light text-muted">Not possible</span>
+                                    {% elif cell.value == False %}
+                                    <span class="text-danger"><i class="bi bi-x-lg"></i></span>
+                                    {% else %}
+                                    <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="card-footer bg-white text-end">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg"></i> Save Changes
+            </button>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .read-only-fields input[readonly] { background: transparent; }
+    .permissions-table .form-check-input { float: none; margin: 0; }
+    .nav-tabs .nav-link { color: #495057; }
+    .nav-tabs .nav-link.active { font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* Tab navigation reloads page; save preserves permissions server-side. */
+</script>
+{% endblock %}

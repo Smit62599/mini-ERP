@@ -1,0 +1,47 @@
+{# Reusable async audit log modal – include on Product, BoM, and MO forms #}
+<div class="modal fade" id="logsModal" tabindex="-1" aria-labelledby="logsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="logsModalLabel">Audit Logs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="logsModalBody">
+                <div class="text-center text-muted py-4">Loading…</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openAuditLogs(module, recordType, recordId) {
+    const body = document.getElementById('logsModalBody');
+    body.innerHTML = '<div class="text-center text-muted py-4">Loading…</div>';
+    const modal = new bootstrap.Modal(document.getElementById('logsModal'));
+    modal.show();
+
+    fetch(`/api/audit/${module}/${recordType}/${recordId}`)
+        .then(r => r.json())
+        .then(rows => {
+            if (!rows.length) {
+                body.innerHTML = '<p class="text-muted text-center">No audit entries found.</p>';
+                return;
+            }
+            body.innerHTML = `<table class="table table-sm table-hover">
+                <thead class="table-light"><tr>
+                    <th>When</th><th>User</th><th>Action</th><th>Field</th><th>Change</th>
+                </tr></thead><tbody>${
+                rows.map(l => `<tr>
+                    <td class="small text-muted">${l.created_at}</td>
+                    <td>${l.user}</td>
+                    <td><span class="badge bg-secondary">${l.action}</span></td>
+                    <td class="small">${l.field_changed || '—'}</td>
+                    <td class="small">${l.old_value || ''} → ${l.new_value || ''}</td>
+                </tr>`).join('')
+            }</tbody></table>`;
+        })
+        .catch(() => {
+            body.innerHTML = '<p class="text-danger text-center">Failed to load logs.</p>';
+        });
+}
+</script>

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}{{ bom.bom_number if bom else 'New BoM' }} – Shiv Furniture Works{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a href="{{ url_for('bom.list_boms') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+    {% if bom %}
+    <button type="button" class="btn btn-outline-info btn-sm" onclick="openAuditLogs('bom', 'BillOfMaterials', {{ bom.id }})">
+        <i class="bi bi-journal-text"></i> Logs
+    </button>
+    {% endif %}
+</div>
+
+<form method="POST">
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white"><h4 class="mb-0">{{ bom.bom_number if bom else 'New BoM' }}</h4></div>
+        <div class="card-body row g-3">
+            <div class="col-md-6">
+                <label class="form-label">Finished Product</label>
+                <select name="finished_product_id" class="form-select" required>
+                    {% for p in products %}
+                    <option value="{{ p.id }}" {% if bom and bom.finished_product_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Base Quantity</label>
+                <input type="number" name="quantity" class="form-control" min="1" value="{{ bom.quantity if bom else 1 }}" required>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white d-flex justify-content-between">
+            <h5 class="mb-0">Components</h5>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="add-component">Add Row</button>
+        </div>
+        <div class="table-responsive">
+            <table class="table mb-0" id="components-table">
+                <thead class="table-light">
+                    <tr><th>Component</th><th>Qty Required</th><th></th></tr>
+                </thead>
+                <tbody>
+                    {% if bom %}
+                        {% for c in bom.components %}
+                        <tr>
+                            <td>
+                                <select name="component_product_id" class="form-select">
+                                    {% for p in all_products %}
+                                    <option value="{{ p.id }}" {% if c.component_product_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td><input type="number" step="0.001" name="quantity_required" class="form-control" value="{{ c.quantity_required }}"></td>
+                            <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white d-flex justify-content-between">
+            <h5 class="mb-0">Operations</h5>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="add-operation">Add Row</button>
+        </div>
+        <div class="table-responsive">
+            <table class="table mb-0" id="operations-table">
+                <thead class="table-light">
+                    <tr><th>Operation</th><th>Work Center</th><th>Duration (min)</th><th></th></tr>
+                </thead>
+                <tbody>
+                    {% if bom %}
+                        {% for o in bom.operations %}
+                        <tr>
+                            <td><input type="text" name="operation_name" class="form-control" value="{{ o.operation_name }}"></td>
+                            <td>
+                                <select name="work_center_id" class="form-select">
+                                    {% for wc in work_centers %}
+                                    <option value="{{ wc.id }}" {% if o.work_center_id == wc.id %}selected{% endif %}>{{ wc.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td><input type="number" name="duration_minutes" class="form-control" value="{{ o.duration_minutes }}"></td>
+                            <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save BoM</button>
+</form>
+
+{% include "partials/logs_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const productOptions = `{% for p in all_products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}`;
+const wcOptions = `{% for wc in work_centers %}<option value="{{ wc.id }}">{{ wc.name }}</option>{% endfor %}`;
+
+document.getElementById('add-component').addEventListener('click', () => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><select name="component_product_id" class="form-select">${productOptions}</select></td>
+        <td><input type="number" step="0.001" name="quantity_required" class="form-control" value="1"></td>
+        <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">×</button></td>`;
+    document.querySelector('#components-table tbody').appendChild(tr);
+});
+document.getElementById('add-operation').addEventListener('click', () => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><input type="text" name="operation_name" class="form-control"></td>
+        <td><select name="work_center_id" class="form-select">${wcOptions}</select></td>
+        <td><input type="number" name="duration_minutes" class="form-control" value="30"></td>
+        <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">×</button></td>`;
+    document.querySelector('#operations-table tbody').appendChild(tr);
+});
+document.addEventListener('click', e => {
+    if (e.target.classList.contains('remove-row')) e.target.closest('tr').remove();
+});
+</script>
+{% endblock %}

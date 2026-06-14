@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+{% block title %}{{ order.mo_number if order else 'New Manufacturing Order' }} – Shiv Furniture Works{% endblock %}
+
+{% block content %}
+{% set readonly = order and order.is_readonly %}
+{% set locked = order and order.is_locked %}
+{% set status = order.status.value if order else 'draft' %}
+{% set show_real = status in ['confirmed', 'inprogress', 'done'] %}
+{% set show_consumed = status in ['confirmed', 'inprogress', 'done'] %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('manufacturing.list_orders') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back
+        </a>
+        {% if order and status == 'draft' and not readonly %}
+        <form method="POST" action="{{ url_for('manufacturing.confirm_order', order_id=order.id) }}" class="d-inline">
+            <button type="submit" class="btn btn-success">Confirm</button>
+        </form>
+        {% endif %}
+        {% if order and status == 'confirmed' %}
+        <form method="POST" action="{{ url_for('manufacturing.start_order', order_id=order.id) }}" class="d-inline">
+            <button type="submit" class="btn btn-warning">Start Production</button>
+        </form>
+        {% endif %}
+        {% if order and status == 'inprogress' %}
+        <form method="POST" action="{{ url_for('manufacturing.produce_order', order_id=order.id) }}" id="produce-form" class="d-inline">
+            <button type="submit" class="btn btn-primary">Mark as Produced</button>
+        </form>
+        {% endif %}
+        {% if order and status not in ['done', 'cancelled'] %}
+        <form method="POST" action="{{ url_for('manufacturing.cancel_order', order_id=order.id) }}" class="d-inline"
+              onsubmit="return confirm('Cancel this MO?');">
+            <button type="submit" class="btn btn-outline-danger">Cancel</button>
+        </form>
+        {% endif %}
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        {% if order %}
+        <button type="button" class="btn btn-outline-info btn-sm"
+                onclick="openAuditLogs('manufacturing', 'ManufacturingOrder', {{ order.id }})">
+            <i class="bi bi-journal-text"></i> Logs
+        </button>
+        <span class="badge {{ order.status_badge_class }} status-badge fs-6">{{ order.status_label }}</span>
+        {% endif %}
+    </div>
+</div>
+
+        {% if order and not order.components and status == 'draft' %}
+        <div class="alert alert-warning py-2">
+            <i class="bi bi-exclamation-triangle"></i>
+            This MO has no components. Select a <strong>BoM template</strong> below and click <strong>Save MO</strong> before confirming.
+        </div>
+        {% endif %}
+
+<form method="POST" id="mo-form">
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+            <h4 class="mb-0">{{ order.mo_number if order else 'New Manufacturing Order' }}</h4>
+        </div>
+        <div class="card-body row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Finished Product</label>
+                <select name="finished_product_id" id="finished-product" class="form-select"
+                        {% if locked or readonly %}disabled{% endif %} required>
+                    <option value="">Select…</option>
+                    {% for p in finished_products %}
+                    <option value="{{ p.id }}"
+                        {% if order and order.finished_product_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Quantity</label>
+                <input type="number" name="quantity" id="mo-quantity" class="form-control" min="1" step="1"
+                       value="{{ order.quantity|int if order else 1 }}"
+                       {% if locked or readonly %}readonly{% endif %} required>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Bill of Materials</label>
+                <select name="bom_id" id="bom-select" class="form-select"
+                        {% if locked or readonly %}disabled{% endif %}>
+                    <option value="">— Select BoM —</option>
+                    {% for b in boms %}
+                    <option value="{{ b.id }}" data-product-id="{{ b.finished_product_id }}"
+                        {% if order and order.bom_id == b.id %}selected{% endif %}>
+                        {{ b.bom_number }} – {{ b.finished_product.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Assignee</label>
+                {% if current_user.role.value == 'manufacturing' %}
+                <input type="text" class="form-control" readonly value="{{ order.assignee.name if order else current_user.name }}">
+                {% if not locked %}<input type="hidden" name="assignee_id" value="{{ order.assignee_id if order else current_user.id }}">{% endif %}
+                {% else %}
+                <select name="assignee_id" class="form-select" {% if locked or readonly %}disabled{% endif %}>
+                    {% for op in operators %}
+                    <option value="{{ op.id }}" {% if order and order.assignee_id == op.id %}selected{% endif %}>{{ op.name }}</option>
+                    {% endfor %}
+                </select>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-components" type="button">Components</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-workorders" type="button">Work Orders</button></li>
+    </ul>
+
+    <div class="tab-content">
+        <div class="tab-pane fade show active" id="tab-components">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <span class="fw-semibold">Components</span>
+                    {% if not order or status == 'draft' %}
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="add-component-line">
+                        <i class="bi bi-plus-lg"></i> Add Component Line
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="table-responsive">
+                    <table class="table mb-0" id="components-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Component</th>
+                                <th>Availability</th>
+                                <th>To Consume</th>
+                                <th>Consumed</th>
+                                {% if not order or status == 'draft' %}<th></th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if order and status != 'draft' %}
+                                {% for comp in order.components %}
+                                <tr>
+                                    <td>{{ comp.component_product | product_label }}</td>
+                                    <td class="availability-cell" data-product-id="{{ comp.component_product_id }}">—</td>
+                                    <td>{{ comp.required_qty }}</td>
+                                    <td>
+                                        {% if show_consumed and status != 'done' %}
+                                        <input type="number" step="0.001" name="consumed_qty_{{ comp.id }}" class="form-control"
+                                               value="{{ comp.consumed_qty or comp.required_qty }}" form="produce-form">
+                                        {% else %}
+                                        {{ comp.consumed_qty }}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-3">
+                                        No components on this MO.
+                                        {% if status == 'draft' %}Save from BoM or add lines manually.{% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% elif order and status == 'draft' %}
+                                {% for comp in order.components %}
+                                <tr class="component-row">
+                                    <td>
+                                        <select name="component_product_id" class="form-select component-select" required>
+                                            <option value="">Select…</option>
+                                            {% for p in component_products %}
+                                            <option value="{{ p.id }}" {% if comp.component_product_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                    <td class="availability-cell">—</td>
+                                    <td><input type="number" step="0.001" name="required_qty" class="form-control required-qty" value="{{ comp.required_qty }}" min="0.001" required></td>
+                                    <td><input type="number" name="consumed_qty" class="form-control" value="0" readonly></td>
+                                    <td><button type="button" class="btn btn-sm btn-outline-danger remove-component">×</button></td>
+                                </tr>
+                                {% else %}
+                                <tr id="components-empty">
+                                    <td colspan="5" class="text-center text-muted py-3">Add components manually or select a BoM template.</td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                            <tr id="components-empty">
+                                <td colspan="5" class="text-center text-muted py-3">
+                                    Select a finished product and BoM template, or add component lines manually.
+                                </td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="tab-workorders">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <span class="fw-semibold">Work Orders</span>
+                    {% if not order or status == 'draft' %}
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="add-operation-line">
+                        <i class="bi bi-plus-lg"></i> Add Operation Line
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="table-responsive">
+                    <table class="table mb-0" id="workorders-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Operation</th>
+                                <th>Work Center</th>
+                                <th>Expected Duration (min)</th>
+                                <th class="real-duration-col" {% if not show_real %}style="display:none"{% endif %}>Real Duration (min)</th>
+                                {% if not order or status == 'draft' %}<th></th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if order and status != 'draft' %}
+                                {% for wo in order.work_orders %}
+                                <tr>
+                                    <td>{{ wo.operation_name }}</td>
+                                    <td>{{ wo.work_center.name }}</td>
+                                    <td>{{ wo.expected_duration }}</td>
+                                    <td class="real-duration-col" {% if not show_real %}style="display:none"{% endif %}>
+                                        {% if status == 'inprogress' %}
+                                        <input type="number" step="1" name="real_duration_{{ wo.id }}" class="form-control" value="{{ wo.real_duration }}" form="produce-form">
+                                        {% else %}
+                                        {{ wo.real_duration }}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-3">No work orders on this MO.</td>
+                                </tr>
+                                {% endfor %}
+                            {% elif order and status == 'draft' %}
+                                {% for wo in order.work_orders %}
+                                <tr class="operation-row">
+                                    <td><input type="text" name="operation_name" class="form-control" value="{{ wo.operation_name }}" required></td>
+                                    <td>
+                                        <select name="work_center_id" class="form-select" required>
+                                            {% for wc in work_centers %}
+                                            <option value="{{ wc.id }}" {% if wo.work_center_id == wc.id %}selected{% endif %}>{{ wc.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                    <td><input type="number" name="expected_duration" class="form-control expected-duration" value="{{ wo.expected_duration }}" min="1" required></td>
+                                    <td class="real-duration-col" style="display:none"></td>
+                                    <td><button type="button" class="btn btn-sm btn-outline-danger remove-operation">×</button></td>
+                                </tr>
+                                {% else %}
+                                <tr id="workorders-empty">
+                                    <td colspan="5" class="text-center text-muted py-3">Add operations manually or select a BoM template.</td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                            <tr id="workorders-empty">
+                                <td colspan="5" class="text-center text-muted py-3">Operations load from BoM or manual entry.</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not order or status == 'draft' %}
+    <button type="submit" class="btn btn-primary" {% if readonly %}disabled{% endif %}>
+        <i class="bi bi-check-lg"></i> {{ 'Save MO' if order else 'Create MO' }}
+    </button>
+    {% endif %}
+</form>
+
+{% include "partials/logs_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const PRODUCTS = {{ products_json | tojson }};
+const BOMS = {{ boms_json | tojson }};
+const IS_DRAFT = {{ 'true' if not order or status == 'draft' else 'false' }};
+const productMap = Object.fromEntries(PRODUCTS.map(p => [p.id, p]));
+const componentOptions = `{% for p in component_products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}`;
+const wcOptions = `{% for wc in work_centers %}<option value="{{ wc.id }}">{{ wc.name }}</option>{% endfor %}`;
+
+function clearEmptyRows() {
+    document.getElementById('components-empty')?.remove();
+    document.getElementById('workorders-empty')?.remove();
+}
+
+function addComponentRow(productId = '', qty = '1') {
+    clearEmptyRows();
+    const tr = document.createElement('tr');
+    tr.className = 'component-row';
+    tr.innerHTML = `
+        <td><select name="component_product_id" class="form-select component-select" required>
+            <option value="">Select…</option>${componentOptions}</select></td>
+        <td class="availability-cell">—</td>
+        <td><input type="number" step="0.001" name="required_qty" class="form-control required-qty" value="${qty}" min="0.001" required></td>
+        <td><input type="number" name="consumed_qty" class="form-control" value="0" readonly></td>
+        <td><button type="button" class="btn btn-sm btn-outline-danger remove-component">×</button></td>`;
+    if (productId) tr.querySelector('select').value = productId;
+    document.querySelector('#components-table tbody').appendChild(tr);
+    tr.querySelector('.component-select').addEventListener('change', updateAvailabilityCells);
+    tr.querySelector('.required-qty').addEventListener('input', updateAvailabilityCells);
+    updateAvailabilityCells();
+}
+
+function addOperationRow(name = '', wcId = '', duration = '30') {
+    clearEmptyRows();
+    const tr = document.createElement('tr');
+    tr.className = 'operation-row';
+    tr.innerHTML = `
+        <td><input type="text" name="operation_name" class="form-control" value="${name}" required></td>
+        <td><select name="work_center_id" class="form-select" required>${wcOptions}</select></td>
+        <td><input type="number" name="expected_duration" class="form-control expected-duration" value="${duration}" min="1" required></td>
+        <td class="real-duration-col" style="display:none"></td>
+        <td><button type="button" class="btn btn-sm btn-outline-danger remove-operation">×</button></td>`;
+    if (wcId) tr.querySelector('select').value = wcId;
+    document.querySelector('#workorders-table tbody').appendChild(tr);
+}
+
+function availabilityBadge(productId, required) {
+    const p = productMap[productId];
+    if (!p) return '<span class="badge bg-secondary">—</span>';
+    const ok = p.free_to_use_qty >= required;
+    return ok
+        ? '<span class="badge bg-success">Available</span>'
+        : '<span class="badge bg-danger">Not Available</span>';
+}
+
+function updateAvailabilityCells() {
+    document.querySelectorAll('#components-table tbody tr').forEach(row => {
+        const pid = row.querySelector('[name="component_product_id"]')?.value;
+        const req = parseFloat(row.querySelector('.required-qty')?.value || 0);
+        const cell = row.querySelector('.availability-cell');
+        if (cell && pid) cell.innerHTML = availabilityBadge(parseInt(pid), req);
+    });
+}
+
+function scaleQuantities() {
+    const moQty = parseInt(document.getElementById('mo-quantity').value) || 1;
+    document.querySelectorAll('#components-table .required-qty').forEach(inp => {
+        const base = parseFloat(inp.dataset.baseQty || inp.value);
+        if (inp.dataset.baseQty) inp.value = (base * moQty).toFixed(3);
+    });
+    document.querySelectorAll('#workorders-table .expected-duration').forEach(inp => {
+        const base = parseInt(inp.dataset.baseMin || inp.value);
+        if (inp.dataset.baseMin) inp.value = Math.max(Math.round(base * moQty), 1);
+    });
+    updateAvailabilityCells();
+}
+
+function filterBomDropdown() {
+    const pid = document.getElementById('finished-product').value;
+    const sel = document.getElementById('bom-select');
+    [...sel.options].forEach(opt => {
+        if (!opt.value) return;
+        opt.hidden = pid && opt.dataset.productId !== pid;
+    });
+    if (sel.selectedOptions[0]?.hidden) sel.value = '';
+}
+
+async function injectBom(bomId) {
+    if (!bomId || !IS_DRAFT) return;
+    const res = await fetch(`/bom/${bomId}/api`);
+    const data = await res.json();
+    const moQty = parseInt(document.getElementById('mo-quantity').value) || 1;
+    const base = data.quantity || 1;
+
+    const cBody = document.querySelector('#components-table tbody');
+    cBody.innerHTML = '';
+    data.components.forEach(c => {
+        const scaled = (c.quantity_required / base) * moQty;
+        addComponentRow(String(c.component_product_id), scaled.toFixed(3));
+        const row = cBody.lastElementChild;
+        const req = row.querySelector('.required-qty');
+        req.dataset.baseQty = c.quantity_required / base;
+        req.readOnly = true;
+    });
+
+    const wBody = document.querySelector('#workorders-table tbody');
+    wBody.innerHTML = '';
+    data.operations.forEach(o => {
+        const scaled = Math.max(Math.round((o.duration_minutes / base) * moQty), 1);
+        addOperationRow(o.operation_name, String(o.work_center_id), String(scaled));
+        const row = wBody.lastElementChild;
+        const exp = row.querySelector('.expected-duration');
+        exp.dataset.baseMin = o.duration_minutes / base;
+        exp.readOnly = true;
+    });
+    updateAvailabilityCells();
+}
+
+document.getElementById('finished-product')?.addEventListener('change', filterBomDropdown);
+document.getElementById('mo-quantity')?.addEventListener('input', () => { scaleQuantities(); });
+document.getElementById('bom-select')?.addEventListener('change', e => injectBom(e.target.value));
+
+if (IS_DRAFT) {
+    document.getElementById('add-component-line')?.addEventListener('click', () => addComponentRow());
+    document.getElementById('add-operation-line')?.addEventListener('click', () => addOperationRow());
+    document.querySelectorAll('.component-select').forEach(el => el.addEventListener('change', updateAvailabilityCells));
+    document.addEventListener('click', e => {
+        if (e.target.classList.contains('remove-component')) {
+            e.target.closest('tr')?.remove();
+            updateAvailabilityCells();
+        }
+        if (e.target.classList.contains('remove-operation')) {
+            e.target.closest('tr')?.remove();
+        }
+    });
+}
+
+filterBomDropdown();
+updateAvailabilityCells();
+
+// Draft MO with BoM selected but empty lines (legacy data): auto-inject template.
+if (IS_DRAFT) {
+    const bomSel = document.getElementById('bom-select');
+    const hasRows = document.querySelector('#components-table tbody tr:not(#components-empty)');
+    if (bomSel?.value && !hasRows) {
+        injectBom(bomSel.value);
+    }
+}
+</script>
+{% endblock %}

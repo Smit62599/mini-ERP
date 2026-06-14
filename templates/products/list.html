@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Products – Shiv Furniture Works{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Products</h2>
+    {% if current_user.role.value == 'admin' %}
+    <a href="{{ url_for('products.product_form') }}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> New Product
+    </a>
+    {% endif %}
+</div>
+
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Name</th>
+                    <th class="text-end">Sales Price</th>
+                    <th class="text-end">Cost Price</th>
+                    <th class="text-end">On Hand</th>
+                    <th class="text-end">Reserved</th>
+                    <th class="text-end">Free to Use</th>
+                    <th>Procurement</th>
+                    {% if current_user.role.value == 'admin' %}<th class="text-end">Actions</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in pagination.items %}
+                <tr>
+                    <td><strong>{{ p.name }}</strong></td>
+                    <td class="text-end">₹{{ p.sales_price }}</td>
+                    <td class="text-end">₹{{ p.cost_price }}</td>
+                    <td class="text-end">{{ p.on_hand_qty }}</td>
+                    <td class="text-end">{{ p.reserved_qty }}</td>
+                    <td class="text-end">
+                        <span class="badge {% if p.free_to_use_qty > 0 %}bg-success{% else %}bg-danger{% endif %}">
+                            {{ p.free_to_use_qty }}
+                        </span>
+                    </td>
+                    <td class="small text-muted">
+                        {% if p.procure_on_demand %}{{ p.procurement_type.value if p.procurement_type else '—' }}{% else %}—{% endif %}
+                    </td>
+                    {% if current_user.role.value == 'admin' %}
+                    <td class="text-end text-nowrap">
+                        <a href="{{ url_for('products.product_form', product_id=p.id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
+                        <form method="POST" action="{{ url_for('products.delete_product_route', product_id=p.id) }}" class="d-inline"
+                              onsubmit="return confirm('Delete this product? Historical order lines will show [Deleted Product].');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center text-muted py-4">No products.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% set endpoint = 'products.list_products' %}
+{% include "partials/pagination.html" %}
+{% endblock %}

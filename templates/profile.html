@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}My Profile – Shiv Furniture Works{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7 col-lg-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                <div>
+                    <h5 class="mb-0">User Login Detail Management</h5>
+                    <small class="text-muted">Your account information</small>
+                </div>
+                <a href="{{ url_for('user_pages.edit_profile') }}"
+                   class="btn btn-outline-secondary btn-sm rounded-circle"
+                   title="Edit profile"
+                   aria-label="Edit profile">
+                    <i class="bi bi-pencil"></i>
+                </a>
+            </div>
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center mb-4 pb-3 border-bottom">
+                    <div class="rounded-circle bg-dark text-white d-flex align-items-center justify-content-center me-3"
+                         style="width: 56px; height: 56px; font-size: 1.5rem; flex-shrink: 0;">
+                        <i class="bi bi-person-fill"></i>
+                    </div>
+                    <div>
+                        <h4 class="mb-0">{{ current_user.name }}</h4>
+                        <span class="badge bg-secondary status-badge">{{ current_user.position_label }}</span>
+                    </div>
+                </div>
+
+                <dl class="row mb-0 profile-detail-list">
+                    <dt class="col-sm-4 text-muted">Name</dt>
+                    <dd class="col-sm-8">{{ current_user.name }}</dd>
+
+                    <dt class="col-sm-4 text-muted">Address</dt>
+                    <dd class="col-sm-8">{{ current_user.address or '—' }}</dd>
+
+                    <dt class="col-sm-4 text-muted">Mobile Number</dt>
+                    <dd class="col-sm-8">{{ current_user.mobile_number or '—' }}</dd>
+
+                    <dt class="col-sm-4 text-muted">Email ID</dt>
+                    <dd class="col-sm-8">{{ current_user.email }}</dd>
+
+                    <dt class="col-sm-4 text-muted">Position</dt>
+                    <dd class="col-sm-8">{{ current_user.position_label }}</dd>
+                </dl>
+            </div>
+            <div class="card-footer bg-white d-flex justify-content-between">
+                <a href="{{ url_for('sales.list_orders') }}" class="btn btn-outline-secondary btn-sm">Back to App</a>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm">Logout</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .profile-detail-list dt { font-weight: 500; padding-top: 0.35rem; }
+    .profile-detail-list dd { padding-top: 0.35rem; margin-bottom: 0.75rem; }
+</style>
+{% endblock %}

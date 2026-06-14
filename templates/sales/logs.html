@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Audit Logs – {{ order.so_number }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Audit Logs – {{ order.so_number }}</h2>
+    <a href="{{ url_for('sales.view_order', order_id=order.id) }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Order
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-sm mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Timestamp</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Field</th>
+                    <th>Old Value</th>
+                    <th>New Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td class="text-nowrap">{{ log.created_at.strftime('%d %b %Y %H:%M:%S') }}</td>
+                    <td>{{ log.user.name if log.user else '—' }}</td>
+                    <td><span class="badge bg-info">{{ log.action }}</span></td>
+                    <td>{{ log.field_changed or '—' }}</td>
+                    <td><code>{{ log.old_value or '—' }}</code></td>
+                    <td><code>{{ log.new_value or '—' }}</code></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted py-4">No audit logs recorded yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

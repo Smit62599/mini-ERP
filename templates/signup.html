@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Sign Up – Shiv Furniture Works{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-4">
+    <div class="col-md-7 col-lg-5">
+        <div class="card shadow">
+            <div class="card-body p-4">
+                <h3 class="card-title text-center mb-1">Create Account</h3>
+                <p class="text-center text-muted mb-4">Shiv Furniture Works – User Registration</p>
+
+                {% if current_user.is_authenticated %}
+                <div class="alert alert-warning">
+                    You are signed in as <strong>{{ current_user.name }}</strong>.
+                    Log out before creating another account.
+                </div>
+                <div class="d-grid gap-2 mb-3">
+                    <a href="{{ url_for('user_pages.profile') }}" class="btn btn-outline-secondary">My Profile</a>
+                    <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger">Logout</a>
+                </div>
+                {% else %}
+                <form method="POST" novalidate>
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Full Name</label>
+                        <input type="text" class="form-control" id="name" name="name"
+                               required autofocus
+                               value="{{ form.get('name', '') if form else '' }}">
+                    </div>
+                    <div class="mb-3">
+                        <label for="address" class="form-label">Address</label>
+                        <textarea class="form-control" id="address" name="address" rows="2"
+                                  required>{{ form.get('address', '') if form else '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="mobile_number" class="form-label">Mobile Number</label>
+                        <input type="tel" class="form-control" id="mobile_number" name="mobile_number"
+                               required placeholder="+91 98765 43210"
+                               value="{{ form.get('mobile_number', '') if form else '' }}">
+                    </div>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email ID</label>
+                        <input type="email" class="form-control" id="email" name="email"
+                               required placeholder="you@example.com"
+                               value="{{ form.get('email', '') if form else '' }}">
+                    </div>
+                    <div class="mb-3">
+                        <label for="position" class="form-label">Position</label>
+                        <select class="form-select" id="position" name="position" required>
+                            <option value="" disabled {% if not form or not form.get('position') %}selected{% endif %}>
+                                Select position…
+                            </option>
+                            {% for pos in positions %}
+                            <option value="{{ pos }}"
+                                {% if form and form.get('position') == pos %}selected{% endif %}>
+                                {{ pos }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="password" name="password"
+                               required minlength="6" placeholder="Minimum 6 characters">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Create Account</button>
+                </form>
+
+                <p class="text-center text-muted small mt-3 mb-0">
+                    Already have an account?
+                    <a href="{{ url_for('auth.login') }}">Sign in</a>
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

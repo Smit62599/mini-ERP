@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Shiv Furniture Works{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root { --sidebar-width: 240px; }
+        body { min-height: 100vh; background-color: #f4f6f9; }
+        .navbar-brand { font-weight: 700; letter-spacing: 0.5px; }
+        .status-badge { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .kanban-column { min-height: 400px; background: #fff; border-radius: 8px; padding: 12px; }
+        .kanban-card { cursor: pointer; transition: box-shadow 0.15s; }
+        .kanban-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+        .availability-warning { color: #dc3545; font-weight: 600; }
+        .availability-ok { color: #198754; }
+        .navbar-app { position: relative; }
+        .navbar-brand-center {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+        }
+        .nav-user-avatar {
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            font-size: 1.35rem;
+            text-decoration: none;
+        }
+        .nav-user-avatar:hover { background: rgba(255, 255, 255, 0.28); color: #fff; }
+        .nav-user-avatar.dropdown-toggle::after { display: none; }
+        .offcanvas-nav .nav-link { color: #212529; padding: 0.65rem 0; border-bottom: 1px solid #eee; }
+        .offcanvas-nav .nav-link:last-child { border-bottom: none; }
+        .profile-detail-list dt { font-weight: 500; }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% if current_user.is_authenticated %}
+    <nav class="navbar navbar-dark bg-dark navbar-app">
+        <div class="container-fluid">
+            <button class="btn btn-link text-light px-2 py-1 border-0"
+                    type="button"
+                    data-bs-toggle="offcanvas"
+                    data-bs-target="#appNavDrawer"
+                    aria-controls="appNavDrawer"
+                    aria-label="Open navigation menu">
+                <i class="bi bi-list fs-3"></i>
+            </button>
+
+            <a class="navbar-brand navbar-brand-center" href="{{ url_for('sales.list_orders') }}">
+                <i class="bi bi-box-seam"></i> Shiv Furniture Works
+            </a>
+
+            <div class="dropdown ms-auto">
+                <a class="nav-link rounded-circle nav-user-avatar dropdown-toggle hide-arrow"
+                   href="#"
+                   role="button"
+                   data-bs-toggle="dropdown"
+                   aria-expanded="false"
+                   title="Account menu"
+                   aria-label="Account menu">
+                    <i class="bi bi-person-fill"></i>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end shadow">
+                    <li><h6 class="dropdown-header">{{ current_user.name }}</h6></li>
+                    <li><a class="dropdown-item" href="{{ url_for('user_pages.profile') }}">
+                        <i class="bi bi-person-circle me-2"></i> My Profile
+                    </a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('sales.list_orders') }}">
+                        <i class="bi bi-speedometer2 me-2"></i> Dashboard
+                    </a></li>
+                    {% if current_user.role.value == 'admin' %}
+                    <li><a class="dropdown-item" href="{{ url_for('admin_users.list_users') }}">
+                        <i class="bi bi-people me-2"></i> User Management
+                    </a></li>
+                    {% endif %}
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
+                        <i class="bi bi-box-arrow-right me-2"></i> Logout
+                    </a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="offcanvas offcanvas-start offcanvas-nav" tabindex="-1" id="appNavDrawer"
+         aria-labelledby="appNavDrawerLabel">
+        <div class="offcanvas-header border-bottom">
+            <h5 class="offcanvas-title" id="appNavDrawerLabel">Navigation</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            <nav class="nav flex-column">
+                <a class="nav-link" href="{{ url_for('sales.list_orders') }}">
+                    <i class="bi bi-cart3 me-2"></i> Sales
+                </a>
+                {% if current_user.role.value == 'admin' %}
+                <a class="nav-link" href="{{ url_for('admin_users.list_users') }}">
+                    <i class="bi bi-people me-2"></i> User Management
+                </a>
+                {% endif %}
+                {% if current_user.role.value in ['admin', 'sales', 'manufacturing'] %}
+                <a class="nav-link" href="{{ url_for('products.list_products') }}">
+                    <i class="bi bi-box me-2"></i> Products
+                </a>
+                {% endif %}
+                {% if current_user.role.value in ['admin', 'sales'] %}
+                <a class="nav-link" href="{{ url_for('purchase.list_orders') }}">
+                    <i class="bi bi-bag-check me-2"></i> Purchasing
+                </a>
+                {% endif %}
+                {% if current_user.role.value in ['admin', 'manufacturing'] %}
+                <a class="nav-link" href="{{ url_for('bom.list_boms') }}">
+                    <i class="bi bi-diagram-3 me-2"></i> BoM
+                </a>
+                <a class="nav-link" href="{{ url_for('manufacturing.list_orders') }}">
+                    <i class="bi bi-gear-wide-connected me-2"></i> Manufacturing
+                </a>
+                {% endif %}
+                <a class="nav-link" href="{{ url_for('user_pages.profile') }}">
+                    <i class="bi bi-person-circle me-2"></i> My Profile
+                </a>
+                <a class="nav-link text-danger" href="{{ url_for('auth.logout') }}">
+                    <i class="bi bi-box-arrow-right me-2"></i> Logout
+                </a>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+
+    <main class="container-fluid py-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
